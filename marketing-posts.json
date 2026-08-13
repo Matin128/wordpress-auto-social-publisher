@@ -1,0 +1,300 @@
+{
+  "name": "wordpress-auto-social-publisher",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wordpress-post-webhook",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1264,
+        592
+      ],
+      "id": "43950cdd-d0fa-419e-a89a-ec25f3d13140",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=موضوع :{{ $json.body.post.post_title }}\n\n\nمتن :\n{{ $json.body.post.post_content }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "شما یک دستیار ارشد مارکتینگ و سئو هستید. متن مقاله‌ای که به شما داده می‌شود را تحلیل کنید و خروجی را دقیقاً به فرمت JSON زیر تولید کنید (هیچ متن اضافی یا توضیح قبل و بعد از JSON ننویسید):\n\n{\n  \"meta_description\": \"متای سئو جذاب حداکثر ۱۵۰ کاراکتر شامل کلمات کلیدی اصلی\",\n  \"focus_keywords\": \"کلمه کلیدی اصلی، کلمه کلیدی فرعی ۱، کلمه کلیدی فرعی ۲\",\n  \"telegram_post\": \"متن جذاب و روان برای کانال تلگرام به همراه ایموجی‌های مناسب و هشتگ‌ها و لحن صمیمی\",\n  \"linkedin_post\": \"متن حرفه‌ای و تخصصی برای لینکدین با لحن بیزینسی، ساختار تمیز، هشتگ‌های تخصصی و دعوت به اقدام (CTA)\"\n}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -1040,
+        592
+      ],
+      "id": "e7dca7f4-760c-44c9-840d-6e6829053bd1",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-1.5-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -976,
+        832
+      ],
+      "id": "c66bd5ea-31ee-4bdb-aa42-c611af992107",
+      "name": "Google Gemini Chat Model"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ۱. دریافت متن خام خروجی LLM\nlet rawText = $input.item.json.text || \"\";\n\n// ۲. پاک‌سازی تگ‌های Markdown Codeblock\nrawText = rawText\n  .replace(/```json/gi, \"\")\n  .replace(/```/g, \"\")\n  .trim();\n\nlet aiData = {};\n\ntry {\n  aiData = JSON.parse(rawText);\n} catch (e) {\n  aiData = {\n    meta_description: \"خطا در تولید متای سئو\",\n    focus_keywords: \"خطا\",\n    telegram_post: \"خطا در پارس کردن خروجی هوش مصنوعی:\\n\" + rawText,\n    linkedin_post: \"\"\n  };\n}\n\n// ۳. دریافت لینک مقاله از وب‌هوک وردپرس\nconst postLink = $('Webhook').item.json.body.post?.permalink || '';\n\n// ۴. جایگزینی لینک و آماده‌سازی خروجی\nconst finalTelegram = (aiData.telegram_post || '').replace(/\\[لینک مقاله\\]/g, postLink);\nconst finalLinkedin = (aiData.linkedin_post || '').replace(/\\[لینک مقاله\\]/g, postLink);\n\nreturn {\n  clean_meta: aiData.meta_description,\n  clean_keywords: aiData.focus_keywords,\n  final_telegram_post: finalTelegram,\n  final_linkedin_post: finalLinkedin\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        592
+      ],
+      "id": "f33cf54f-c862-47eb-9c80-28b060ffd675",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "<YOUR_TELEGRAM_CHAT_ID>",
+        "file": "={{ $('Webhook').item.json.body.featured_image }}",
+        "additionalFields": {
+          "caption": "={{ $json.final_telegram_post }}",
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -240,
+        592
+      ],
+      "id": "08f89321-6441-4504-8505-3f0da3f54db8",
+      "name": "Send a photo message"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "08fde4cc-72a6-47a3-a374-5efd29d9a444",
+              "leftValue": "={{ $('Webhook').item.json.body.featured_image }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -464,
+        688
+      ],
+      "id": "15590a31-cde6-463e-ac93-1b21552b9817",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "text": "={{ $('Code in JavaScript').item.json.final_telegram_post }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -240,
+        784
+      ],
+      "id": "adb3e522-bdd3-4762-90b6-31da40e342f6",
+      "name": "Send a text message"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://tapi.bale.ai/<YOUR_BALE_TOKEN>/sendMessage",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "<YOUR_BALE_CHAT_ID>"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.final_telegram_post }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -464,
+        304
+      ],
+      "id": "8fa41dae-39b1-4709-9830-b510a63dedda",
+      "name": "bale"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://eitaayar.ir/api/<YOUR_EITAA_TOKEN>/sendMessage",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "<YOUR_EITAA_CHAT_ID>"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.final_telegram_post }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -464,
+        880
+      ],
+      "id": "8d266a9a-d431-457b-a656-3e69780ae028",
+      "name": "eita"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -464,
+        496
+      ],
+      "id": "ee1c8942-b594-4a2d-9d9b-404dedaba890",
+      "name": "Get row(s) in sheet"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "bale",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "eita",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a photo message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
